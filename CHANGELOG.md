@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v1.1.0
+
+- :rocket: First pass at showing dots
+
 ### v1.0.0
 
 - :tada: Initial Commit
