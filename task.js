@@ -75,11 +75,45 @@ export default class Task extends ETL {
             })
         });
 
-        console.error(await auth.json());
+        const credentials = (await auth.json()).result.credentials;
+
+        const res = await fetch(new URL(layer.environment.GEOTAB_API + '/apiv1'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                method: 'Get',
+                params: {
+                    credentials,
+                    typeName: "DeviceStatusInfo",
+                }
+            })
+        });
+
+        const body = await res.json();
+        console.error(body.result);
 
         const fc = {
             type: 'FeatureCollection',
-            features: []
+            features: body.result.map((d) => {
+                const feat = {
+                    id: `geotab-${d.device.id}`,
+                    type: 'Feature',
+                    properties: {
+                        callsign: d.device.id,
+                        course: d.bearing,
+                        start: d.dateTime,
+                        speed: d.speed * 0.277778 // Convert km/h => m/s
+                    },
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [d.longitude, d.latitude]
+                    }
+                }
+
+                return feat;
+            })
         };
 
         await this.submit(fc);
