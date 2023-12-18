@@ -77,11 +77,9 @@ export default class Task extends ETL {
 
         const credentials = (await auth.json()).result.credentials;
 
-        const res = await fetch(new URL(layer.environment.GEOTAB_API + '/apiv1'), {
+        const devices = await (await fetch(new URL(layer.environment.GEOTAB_API + '/apiv1'), {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 method: 'Get',
                 params: {
@@ -89,19 +87,42 @@ export default class Task extends ETL {
                     typeName: "DeviceStatusInfo",
                 }
             })
-        });
+        })).json();
 
-        const body = await res.json();
-        console.error(body.result);
+        const info = await (await fetch(new URL(layer.environment.GEOTAB_API + '/apiv1'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                method: 'Get',
+                params: {
+                    credentials,
+                    typeName: "Device",
+                }
+            })
+        })).json();
+
+        const infoMap = new Map();
+        for (const i of info.result) {
+            infoMap.set(i.id, i);
+        }
+
 
         const fc = {
             type: 'FeatureCollection',
-            features: body.result.map((d) => {
+            features: devices.result.map((d) => {
+                let callsign = d.device.id;
+                if (infoMap.has(d.device.id)) {
+                    const info = infoMap.get(d.device.id);
+                    if (!info.licenseState) info.licenseState = 'US';
+                    callsign = info.licenseState + '-' info.licensePlate
+                    console.error(info.licenseState);
+                }
+
                 const feat = {
                     id: `geotab-${d.device.id}`,
                     type: 'Feature',
                     properties: {
-                        callsign: d.device.id,
+                        callsign,
                         course: d.bearing,
                         start: d.dateTime,
                         speed: d.speed * 0.277778 // Convert km/h => m/s
