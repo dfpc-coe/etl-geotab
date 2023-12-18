@@ -1,5 +1,6 @@
 import fs from 'fs';
 import ETL from '@tak-ps/etl';
+import moment from 'moment-timezone'
 
 try {
     const dotfile = new URL('.env', import.meta.url);
@@ -106,16 +107,16 @@ export default class Task extends ETL {
             infoMap.set(i.id, i);
         }
 
-
         const fc = {
             type: 'FeatureCollection',
-            features: devices.result.map((d) => {
+            features: devices.result.filter((d) => {
+                return moment(d.dateTime).isAfter(moment().subtract(1, 'hour'));
+            }).map((d) => {
                 let callsign = d.device.id;
                 if (infoMap.has(d.device.id)) {
                     const info = infoMap.get(d.device.id);
                     if (!info.licenseState) info.licenseState = 'US';
-                    callsign = info.licenseState + '-' info.licensePlate
-                    console.error(info.licenseState);
+                    callsign = info.licenseState + '-' + (info.licensePlate || 'Unknown')
                 }
 
                 const feat = {

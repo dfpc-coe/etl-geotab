@@ -10,6 +10,11 @@
 
 ## Version History
 
+### v1.2.0
+
+- :rocket: Filter by results in the last hour
+- :rocket: Use State + Plate for callsign where possible
+
 ### v1.1.0
 
 - :rocket: First pass at showing dots
