@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.0.0
+
+- :rocket: Use new Token features
+
 ### v1.2.0
 
 - :rocket: Filter by results in the last hour
