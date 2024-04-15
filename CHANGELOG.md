@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.1.0
+
+- :rocket: Use new metadata property
+
 ### v2.0.0
 
 - :rocket: Use new Token features

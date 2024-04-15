@@ -1,60 +1,29 @@
 import fs from 'fs';
-import ETL from '@tak-ps/etl';
+import ETL, { Event, SchemaType, handler as internal, local, env } from '@tak-ps/etl';
+import { Type, TSchema } from '@sinclair/typebox';
+import { FeatureCollection, Feature, Geometry } from 'geojson';
 import moment from 'moment-timezone'
 
-try {
-    const dotfile = new URL('.env', import.meta.url);
-
-    fs.accessSync(dotfile);
-
-    Object.assign(process.env, JSON.parse(fs.readFileSync(dotfile)));
-    console.log('ok - .env file loaded');
-} catch (err) {
-    console.log('ok - no .env file loaded');
-}
-
 export default class Task extends ETL {
-    static async schema(type = 'input') {
-        if (type === 'input') {
-            return {
-                type: 'object',
-                required: ['GEOTAB_USERNAME', 'GEOTAB_PASSWORD'],
-                properties: {
-                    'GEOTAB_USERNAME': {
-                        type: 'string',
-                        description: 'GeoTab Username'
-                    },
-                    'GEOTAB_PASSWORD': {
-                        type: 'string',
-                        description: 'GeoTab Password'
-                    },
-                    'GEOTAB_DATABASE': {
-                        type: 'string',
-                        description: 'GeoTab Database - Usually OK to leave this blank'
-                    },
-                    'GEOTAB_API': {
-                        type: 'string',
-                        description: 'GeoTab API Endpoint - Defaults to https://gov.geotabgov.us/'
-                    },
-                    'DEBUG': {
-                        type: 'boolean',
-                        default: false,
-                        description: 'Print GeoJSON Features in logs'
-                    }
-                }
-            };
+    async schema(type: SchemaType = SchemaType.Input): Promise<TSchema> {
+        if (type === SchemaType.Input) {
+            return Type.Object({
+                'GEOTAB_USERNAME': Type.String({ description: 'GeoTab Username' }),
+                'GEOTAB_PASSWORD': Type.String({ description: 'GeoTab Password' }),
+                'GEOTAB_DATABASE': Type.String({ description: 'GeoTab Database - Usually OK to leave this blank', default: '' }),
+                'GEOTAB_API': Type.String({ description: 'GeoTab API Endpoint', default: 'https://gov.geotabgov.us/' }),
+                'DEBUG': Type.Boolean({ description: 'Print GeoJSON Features in logs', default: false })
+            });
         } else {
-            return {
-                type: 'object',
-                required: [],
-                properties: {
-                }
-            };
+            return Type.Object({
+                licenseState: Type.String(),
+                licensePlate: Type.String()
+            });
         }
     }
 
     async control() {
-        const layer = await this.layer();
+        const layer = await this.fetchLayer();
 
         if (!layer.environment.GEOTAB_USERNAME) throw new Error('No GEOTAB_USERNAME Provided');
         if (!layer.environment.GEOTAB_PASSWORD) throw new Error('No GEOTAB_PASSWORD Provided');
@@ -107,11 +76,11 @@ export default class Task extends ETL {
             infoMap.set(i.id, i);
         }
 
-        const fc = {
+        const fc: FeatureCollection = {
             type: 'FeatureCollection',
-            features: devices.result.filter((d) => {
+            features: devices.result.filter((d: any) => {
                 return moment(d.dateTime).isAfter(moment().subtract(1, 'hour'));
-            }).map((d) => {
+            }).map((d: any) => {
                 let callsign = d.device.id;
                 if (infoMap.has(d.device.id)) {
                     const info = infoMap.get(d.device.id);
@@ -126,7 +95,11 @@ export default class Task extends ETL {
                         callsign,
                         course: d.bearing,
                         start: d.dateTime,
-                        speed: d.speed * 0.277778 // Convert km/h => m/s
+                        speed: d.speed * 0.277778, // Convert km/h => m/s
+                        metadata: {
+                            licenseState: info.licenseState,
+                            licensePlate: info.licensePlate
+                        }
                     },
                     geometry: {
                         type: 'Point',
@@ -134,7 +107,7 @@ export default class Task extends ETL {
                     }
                 }
 
-                return feat;
+                return feat as Feature;
             })
         };
 
@@ -142,15 +115,9 @@ export default class Task extends ETL {
     }
 }
 
-export async function handler(event = {}) {
-    if (event.type === 'schema:input') {
-        return await Task.schema('input');
-    } else if (event.type === 'schema:output') {
-        return await Task.schema('output');
-    } else {
-        const task = new Task();
-        await task.control();
-    }
+env(import.meta.url)
+await local(new Task(), import.meta.url);
+export async function handler(event: Event = {}) {
+    return await internal(new Task(), event);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) handler();

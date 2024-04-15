@@ -7,16 +7,18 @@
     "main": "index.js",
     "scripts": {
         "lint": "eslint *.js",
+        "build": "tsc --build",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "author": "Nick Ingalls <nick@ingalls.ca>",
     "license": "ISC",
     "devDependencies": {
         "eslint": "^8.31.0",
-        "eslint-plugin-node": "^11.1.0"
+        "typescript": "^5.4.5",
+        "typescript-eslint": "^7.7.0"
     },
     "dependencies": {
-        "@tak-ps/etl": "^3.0.1",
+        "@tak-ps/etl": "^4.3.3",
         "moment-timezone": "^0.5.43"
     }
 }
