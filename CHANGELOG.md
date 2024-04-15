@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.1.1
+
+- :arrow_up: Use latest base
+
 ### v2.1.0
 
 - :rocket: Use new metadata property
