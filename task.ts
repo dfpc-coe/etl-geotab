@@ -12,6 +12,13 @@ export default class Task extends ETL {
                 'GEOTAB_PASSWORD': Type.String({ description: 'GeoTab Password' }),
                 'GEOTAB_DATABASE': Type.String({ description: 'GeoTab Database - Usually OK to leave this blank', default: '' }),
                 'GEOTAB_API': Type.String({ description: 'GeoTab API Endpoint', default: 'https://gov.geotabgov.us/' }),
+                'GEOTAB_FILTER': Type.Boolean({
+                    description: 'Filter by GeoTAB entries that are sucessfully joined with the GEOTAB_AUGMENT data',
+                    default: false
+                }),
+                'GEOTAB_AUGMENT': Type.Array(Type.Object({
+                    vin: Type.String()
+                })),
                 'DEBUG': Type.Boolean({ description: 'Print GeoJSON Features in logs', default: false })
             });
         } else {

@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.2.0
+
+- :arrow_up: Update to include Augment
+
 ### v2.1.1
 
 - :arrow_up: Use latest base
