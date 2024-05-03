@@ -1,26 +1,28 @@
 import fs from 'fs';
 import ETL, { Event, SchemaType, handler as internal, local, env } from '@tak-ps/etl';
-import { Type, TSchema } from '@sinclair/typebox';
+import { Type, TSchema, Static } from '@sinclair/typebox';
 import { FeatureCollection, Feature, Geometry } from 'geojson';
 import moment from 'moment-timezone'
+
+const SchemaInput = Type.Object({
+    'GEOTAB_USERNAME': Type.String({ description: 'GeoTab Username' }),
+    'GEOTAB_PASSWORD': Type.String({ description: 'GeoTab Password' }),
+    'GEOTAB_DATABASE': Type.String({ description: 'GeoTab Database - Usually OK to leave this blank', default: '' }),
+    'GEOTAB_API': Type.String({ description: 'GeoTab API Endpoint', default: 'https://gov.geotabgov.us/' }),
+    'GEOTAB_FILTER': Type.Boolean({
+        description: 'Filter by GeoTAB entries that are sucessfully joined with the GEOTAB_AUGMENT data',
+        default: false
+    }),
+    'GEOTAB_AUGMENT': Type.Array(Type.Object({
+        vin: Type.String({ description: 'The Primary Key on which GeoTAB data is joined with External Attributes' })
+    })),
+    'DEBUG': Type.Boolean({ description: 'Print GeoJSON Features in logs', default: false })
+});
 
 export default class Task extends ETL {
     async schema(type: SchemaType = SchemaType.Input): Promise<TSchema> {
         if (type === SchemaType.Input) {
-            return Type.Object({
-                'GEOTAB_USERNAME': Type.String({ description: 'GeoTab Username' }),
-                'GEOTAB_PASSWORD': Type.String({ description: 'GeoTab Password' }),
-                'GEOTAB_DATABASE': Type.String({ description: 'GeoTab Database - Usually OK to leave this blank', default: '' }),
-                'GEOTAB_API': Type.String({ description: 'GeoTab API Endpoint', default: 'https://gov.geotabgov.us/' }),
-                'GEOTAB_FILTER': Type.Boolean({
-                    description: 'Filter by GeoTAB entries that are sucessfully joined with the GEOTAB_AUGMENT data',
-                    default: false
-                }),
-                'GEOTAB_AUGMENT': Type.Array(Type.Object({
-                    vin: Type.String()
-                })),
-                'DEBUG': Type.Boolean({ description: 'Print GeoJSON Features in logs', default: false })
-            });
+            return SchemaInput
         } else {
             return Type.Object({
                 licenseState: Type.String(),
@@ -37,7 +39,9 @@ export default class Task extends ETL {
         if (!layer.environment.GEOTAB_DATABASE) layer.environment.GEOTAB_DATABASE = '';
         if (!layer.environment.GEOTAB_API) layer.environment.GEOTAB_API = 'https://gov.geotabgov.us';
 
-        const auth = await fetch(new URL(layer.environment.GEOTAB_API + '/apiv1'), {
+        const env: Static<typeof SchemaInput> = layer.environment as Static<typeof SchemaInput>;
+
+        const auth = await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -46,15 +50,15 @@ export default class Task extends ETL {
                 method: 'Authenticate',
                 params: {
                     database: "",
-                    userName: layer.environment.GEOTAB_USERNAME,
-                    password: layer.environment.GEOTAB_PASSWORD
+                    userName: env.GEOTAB_USERNAME,
+                    password: env.GEOTAB_PASSWORD
                 }
             })
         });
 
         const credentials = (await auth.json()).result.credentials;
 
-        const devices = await (await fetch(new URL(layer.environment.GEOTAB_API + '/apiv1'), {
+        const devices = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -66,7 +70,7 @@ export default class Task extends ETL {
             })
         })).json();
 
-        const info = await (await fetch(new URL(layer.environment.GEOTAB_API + '/apiv1'), {
+        const info = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -83,10 +87,27 @@ export default class Task extends ETL {
             infoMap.set(i.id, i);
         }
 
+        const augment = new Map();
+/*
+        if (env.GEOTAB_FILTER) {
+            for (const aug of env.GEOTAB_AUGMENT) {
+                if (!aug.vin.trim().length) continue;
+                augment.set(aug.vin.toLowerCase(), aug);
+            }
+        }
+*/
+
         const fc: FeatureCollection = {
             type: 'FeatureCollection',
             features: devices.result.filter((d: any) => {
-                return moment(d.dateTime).isAfter(moment().subtract(1, 'hour'));
+                let passFilter = true;
+                if (env.GEOTAB_FILTER) {
+                    console.error(d);
+                }
+
+                if (passFilter) passFilter = moment(d.dateTime).isAfter(moment().subtract(1, 'hour'));
+
+                return passFilter;
             }).map((d: any) => {
                 let callsign = d.device.id;
                 if (infoMap.has(d.device.id)) {
