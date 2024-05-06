@@ -25,6 +25,7 @@ export default class Task extends ETL {
             return SchemaInput
         } else {
             return Type.Object({
+                vin: Type.String(),
                 licenseState: Type.String(),
                 licensePlate: Type.String()
             });
@@ -88,32 +89,38 @@ export default class Task extends ETL {
         }
 
         const augment = new Map();
-/*
         if (env.GEOTAB_FILTER) {
             for (const aug of env.GEOTAB_AUGMENT) {
                 if (!aug.vin.trim().length) continue;
                 augment.set(aug.vin.toLowerCase(), aug);
             }
         }
-*/
 
+        let filtered = {
+            stale: 0,
+            vin: 0
+        };
         const fc: FeatureCollection = {
             type: 'FeatureCollection',
             features: devices.result.filter((d: any) => {
-                let passFilter = true;
-                if (env.GEOTAB_FILTER) {
-                    console.error(d);
-                }
-
-                if (passFilter) passFilter = moment(d.dateTime).isAfter(moment().subtract(1, 'hour'));
-
-                return passFilter;
+                const pass = moment(d.dateTime).isAfter(moment().subtract(1, 'hour'));
+                if (!pass) ++filtered.stale;
+                return pass;
             }).map((d: any) => {
                 let callsign = d.device.id;
+                const metadata: Record<string, string> = {};
                 if (infoMap.has(d.device.id)) {
                     const info = infoMap.get(d.device.id);
                     if (!info.licenseState) info.licenseState = 'US';
                     callsign = info.licenseState + '-' + (info.licensePlate || 'Unknown')
+
+                    metadata.vin = info.vehicleIdentificationNumber;
+                    metadata.licenseState = info.licenseState;
+                    metadata.licensePlate = info.licensePlate || 'Unknown';
+                } else {
+                    metadata.vin = 'UNKNOWN';
+                    metadata.licenseState = 'UNKNOWN';
+                    metadata.licensePlate = 'UNKNOWN';
                 }
 
                 const feat = {
@@ -124,10 +131,7 @@ export default class Task extends ETL {
                         course: d.bearing,
                         start: d.dateTime,
                         speed: d.speed * 0.277778, // Convert km/h => m/s
-                        metadata: {
-                            licenseState: info.licenseState,
-                            licensePlate: info.licensePlate
-                        }
+                        metadata
                     },
                     geometry: {
                         type: 'Point',
@@ -136,8 +140,19 @@ export default class Task extends ETL {
                 }
 
                 return feat as Feature;
+            }).filter((feat: any) => {
+                if (env.GEOTAB_FILTER) {
+                    const pass = augment.has(feat.properties.metadata.vin.toLowerCase());
+                    if (!pass) ++filtered.vin;
+                    return pass;
+                }
+
+                return true;
             })
         };
+
+        console.log(`ok - filtered ${filtered.stale} locations by staleness`);
+        console.log(`ok - filtered ${filtered.vin} locations by vin`);
 
         await this.submit(fc);
     }

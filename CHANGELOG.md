@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.3.0
+
+- :arrow_up: Allow filtering vehicles by VIN
+
 ### v2.2.0
 
 - :arrow_up: Update to include Augment
