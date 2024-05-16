@@ -1,7 +1,6 @@
-import fs from 'fs';
 import ETL, { Event, SchemaType, handler as internal, local, env } from '@tak-ps/etl';
 import { Type, TSchema, Static } from '@sinclair/typebox';
-import { FeatureCollection, Feature, Geometry } from 'geojson';
+import { FeatureCollection, Feature } from 'geojson';
 import moment from 'moment-timezone'
 
 const SchemaInput = Type.Object({
@@ -97,7 +96,7 @@ export default class Task extends ETL {
             }
         }
 
-        let filtered = {
+        const filtered = {
             stale: 0,
             vin: 0
         };

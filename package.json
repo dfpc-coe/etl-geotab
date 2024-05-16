@@ -6,7 +6,7 @@
     "description": "",
     "main": "index.js",
     "scripts": {
-        "lint": "eslint *.js",
+        "lint": "eslint *.ts",
         "build": "tsc --build",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
@@ -15,7 +15,7 @@
     "devDependencies": {
         "eslint": "^8.31.0",
         "typescript": "^5.4.5",
-        "typescript-eslint": "^7.7.0"
+        "typescript-eslint": "^7.9.0"
     },
     "dependencies": {
         "@tak-ps/etl": "^4.3.3",

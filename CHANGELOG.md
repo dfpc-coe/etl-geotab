@@ -13,6 +13,7 @@
 ### v2.4.0 - 2024-05-16
 
 - :rocket: Allow callsign overrides
+- :rocket: Update to flat ESLint
 
 ### v2.3.0
 
