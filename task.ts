@@ -14,7 +14,8 @@ const SchemaInput = Type.Object({
         default: false
     }),
     'GEOTAB_AUGMENT': Type.Array(Type.Object({
-        vin: Type.String({ description: 'The Primary Key on which GeoTAB data is joined with External Attributes' })
+        vin: Type.String({ description: 'The Primary Key on which GeoTAB data is joined with External Attributes' }),
+        callsign: Type.String({ description: 'A Callsign Override to the default generated callsign' })
     })),
     'DEBUG': Type.Boolean({ description: 'Print GeoJSON Features in logs', default: false })
 });
@@ -122,6 +123,9 @@ export default class Task extends ETL {
                     metadata.licenseState = 'UNKNOWN';
                     metadata.licensePlate = 'UNKNOWN';
                 }
+
+                const aug = augment.get(metadata.vin.toLowerCase())
+                if (aug && aug.callsign) callsign = aug.callsign
 
                 const feat = {
                     id: `geotab-${d.device.id}`,

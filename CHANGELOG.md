@@ -10,9 +10,13 @@
 
 ## Version History
 
+### v2.4.0 - 2024-05-16
+
+- :rocket: Allow callsign overrides
+
 ### v2.3.0
 
-- :arrow_up: Allow filtering vehicles by VIN
+- :rocket: Allow filtering vehicles by VIN
 
 ### v2.2.0
 
