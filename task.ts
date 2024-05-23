@@ -8,13 +8,8 @@ const SchemaInput = Type.Object({
     'GEOTAB_PASSWORD': Type.String({ description: 'GeoTab Password' }),
     'GEOTAB_DATABASE': Type.String({ description: 'GeoTab Database - Usually OK to leave this blank', default: '' }),
     'GEOTAB_API': Type.String({ description: 'GeoTab API Endpoint', default: 'https://gov.geotabgov.us/' }),
-    'GEOTAB_FILTER': Type.Boolean({
-        description: 'Filter by GeoTAB entries that are sucessfully joined with the GEOTAB_AUGMENT data',
-        default: false
-    }),
-    'GEOTAB_AUGMENT': Type.Array(Type.Object({
-        vin: Type.String({ description: 'The Primary Key on which GeoTAB data is joined with External Attributes' }),
-        callsign: Type.String({ description: 'A Callsign Override to the default generated callsign' })
+    'GEOTAB_GROUPS': Type.Array(Type.Object({
+        GroupId: Type.String({ description: 'The GeoTAB GroupID to Filter by' }),
     })),
     'DEBUG': Type.Boolean({ description: 'Print GeoJSON Features in logs', default: false })
 });
@@ -27,7 +22,8 @@ export default class Task extends ETL {
             return Type.Object({
                 vin: Type.String(),
                 licenseState: Type.String(),
-                licensePlate: Type.String()
+                licensePlate: Type.String(),
+                groups: Type.Array(Type.String())
             });
         }
     }
@@ -88,14 +84,6 @@ export default class Task extends ETL {
             infoMap.set(i.id, i);
         }
 
-        const augment = new Map();
-        if (env.GEOTAB_FILTER) {
-            for (const aug of env.GEOTAB_AUGMENT) {
-                if (!aug.vin.trim().length) continue;
-                augment.set(aug.vin.toLowerCase(), aug);
-            }
-        }
-
         const filtered = {
             stale: 0,
             vin: 0
@@ -123,8 +111,7 @@ export default class Task extends ETL {
                     metadata.licensePlate = 'UNKNOWN';
                 }
 
-                const aug = augment.get(metadata.vin.toLowerCase())
-                if (aug && aug.callsign) callsign = aug.callsign
+                metadata.groups = d.groups;
 
                 const feat = {
                     id: `geotab-${d.device.id}`,
@@ -143,11 +130,13 @@ export default class Task extends ETL {
                 }
 
                 return feat as Feature;
-            }).filter((feat: any) => {
-                if (env.GEOTAB_FILTER) {
-                    const pass = augment.has(feat.properties.metadata.vin.toLowerCase());
-                    if (!pass) ++filtered.vin;
-                    return pass;
+            }).filter((feat: Feature) => {
+                if (env.GEOTAB_GROUPS && env.GEOTAB_GROUPS.length) {
+                    for (const group of env.GEOTAB_GROUPS) {
+                        if (feat.properties.metadata.groups.includes(group.GroupId)) return true;
+                    }
+
+                    return false;
                 }
 
                 return true;

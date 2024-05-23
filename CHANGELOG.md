@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.4.0 - 2024-05-23
+
+- :rocket: Switch to group filtering for more efficient throughput
+
 ### v2.4.0 - 2024-05-16
 
 - :rocket: Allow callsign overrides
