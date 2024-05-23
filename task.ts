@@ -55,7 +55,7 @@ export default class Task extends ETL {
 
         const credentials = (await auth.json()).result.credentials;
 
-        const devices = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
+        const info = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -67,84 +67,74 @@ export default class Task extends ETL {
             })
         })).json();
 
-        const info = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
+        const params: any = {
+            credentials,
+            typeName: "Device",
+            search: {
+                excludeUntrackedAssets: true,
+                fromDate: moment().subtract(1, 'hour').toISOString()
+            }
+        }
+
+        if (env.GEOTAB_GROUPS && env.GEOTAB_GROUPS.length) {
+            params.search.groups = env.GEOTAB_GROUPS.map((g) => {
+                return { id: g.GroupId };
+            });
+        }
+
+        const devices = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 method: 'Get',
-                params: {
-                    credentials,
-                    typeName: "Device",
-                }
+                params: params
             })
         })).json();
 
         const infoMap = new Map();
         for (const i of info.result) {
-            infoMap.set(i.id, i);
+            infoMap.set(i.device.id, i);
         }
 
-        const filtered = {
-            stale: 0,
-            vin: 0
-        };
         const fc: FeatureCollection = {
             type: 'FeatureCollection',
-            features: devices.result.filter((d: any) => {
-                const pass = moment(d.dateTime).isAfter(moment().subtract(1, 'hour'));
-                if (!pass) ++filtered.stale;
-                return pass;
-            }).map((d: any) => {
-                let callsign = d.device.id;
+            features: devices.result.map((d: any) => {
+                let callsign = d.id;
                 const metadata: Record<string, string> = {};
-                if (infoMap.has(d.device.id)) {
-                    const info = infoMap.get(d.device.id);
-                    if (!info.licenseState) info.licenseState = 'US';
-                    callsign = info.licenseState + '-' + (info.licensePlate || 'Unknown')
 
-                    metadata.vin = info.vehicleIdentificationNumber;
-                    metadata.licenseState = info.licenseState;
-                    metadata.licensePlate = info.licensePlate || 'Unknown';
-                } else {
-                    metadata.vin = 'UNKNOWN';
-                    metadata.licenseState = 'UNKNOWN';
-                    metadata.licensePlate = 'UNKNOWN';
-                }
+                const info = infoMap.get(d.id);
+                if (!info) return null;
 
-                metadata.groups = d.groups;
+                if (!d.licenseState) d.licenseState = 'US';
+                callsign = d.licenseState + '-' + (d.licensePlate || 'Unknown')
+
+                metadata.vin = d.vehicleIdentificationNumber;
+                metadata.licenseState = d.licenseState;
+                metadata.licensePlate = d.licensePlate || 'Unknown';
+
+                metadata.groups = info.groups;
 
                 const feat = {
-                    id: `geotab-${d.device.id}`,
+                    id: `geotab-${info.device.id}`,
                     type: 'Feature',
                     properties: {
                         callsign,
-                        course: d.bearing,
-                        start: d.dateTime,
-                        speed: d.speed * 0.277778, // Convert km/h => m/s
+                        course: info.bearing,
+                        start: info.dateTime,
+                        speed: info.speed * 0.277778, // Convert km/h => m/s
                         metadata
                     },
                     geometry: {
                         type: 'Point',
-                        coordinates: [d.longitude, d.latitude]
+                        coordinates: [info.longitude, info.latitude]
                     }
                 }
 
                 return feat as Feature;
-            }).filter((feat: Feature) => {
-                if (env.GEOTAB_GROUPS && env.GEOTAB_GROUPS.length) {
-                    for (const group of env.GEOTAB_GROUPS) {
-                        if (feat.properties.metadata.groups.includes(group.GroupId)) return true;
-                    }
-
-                    return false;
-                }
-
-                return true;
+            }).filter((f: Feature | null) => {
+                return f !== null;
             })
         };
-
-        console.log(`ok - filtered ${filtered.stale} locations by staleness`);
-        console.log(`ok - filtered ${filtered.vin} locations by vin`);
 
         await this.submit(fc);
     }

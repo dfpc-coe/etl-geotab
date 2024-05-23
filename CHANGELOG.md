@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.6.0 - 2024-05-23
+
+- :rocket: Use API Filtering
+
 ### v2.5.0 - 2024-05-23
 
 - :rocket: Switch to group filtering for more efficient throughput
