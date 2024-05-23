@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.7.0 - 2024-05-23
+
+- :rocket: Filter by name prefix
+
 ### v2.6.0 - 2024-05-23
 
 - :rocket: Use API Filtering

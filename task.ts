@@ -11,6 +11,7 @@ const SchemaInput = Type.Object({
     'GEOTAB_GROUPS': Type.Array(Type.Object({
         GroupId: Type.String({ description: 'The GeoTAB GroupID to Filter by' }),
     })),
+    'GEOTAB_PREFIX': Type.String({ default: '', description: 'Filter by prefix of name fielt' }),
     'DEBUG': Type.Boolean({ description: 'Print GeoJSON Features in logs', default: false })
 });
 
@@ -21,6 +22,7 @@ export default class Task extends ETL {
         } else {
             return Type.Object({
                 vin: Type.String(),
+                name: Type.String(),
                 licenseState: Type.String(),
                 licensePlate: Type.String(),
                 groups: Type.Array(Type.String())
@@ -34,6 +36,7 @@ export default class Task extends ETL {
         if (!layer.environment.GEOTAB_USERNAME) throw new Error('No GEOTAB_USERNAME Provided');
         if (!layer.environment.GEOTAB_PASSWORD) throw new Error('No GEOTAB_PASSWORD Provided');
         if (!layer.environment.GEOTAB_DATABASE) layer.environment.GEOTAB_DATABASE = '';
+        if (!layer.environment.GEOTAB_PREFIX) layer.environment.GEOTAB_PREFIX = '';
         if (!layer.environment.GEOTAB_API) layer.environment.GEOTAB_API = 'https://gov.geotabgov.us';
 
         const env: Static<typeof SchemaInput> = layer.environment as Static<typeof SchemaInput>;
@@ -46,7 +49,7 @@ export default class Task extends ETL {
             body: JSON.stringify({
                 method: 'Authenticate',
                 params: {
-                    database: "",
+                    database: env.GEOTAB_DATABASE,
                     userName: env.GEOTAB_USERNAME,
                     password: env.GEOTAB_PASSWORD
                 }
@@ -111,8 +114,8 @@ export default class Task extends ETL {
                 metadata.vin = d.vehicleIdentificationNumber;
                 metadata.licenseState = d.licenseState;
                 metadata.licensePlate = d.licensePlate || 'Unknown';
-
                 metadata.groups = info.groups;
+                metadata.name = d.name || 'No Name';
 
                 const feat = {
                     id: `geotab-${info.device.id}`,
@@ -133,6 +136,8 @@ export default class Task extends ETL {
                 return feat as Feature;
             }).filter((f: Feature | null) => {
                 return f !== null;
+            }).filter((f: Feature) => {
+                return f.properties.metadata.name.startsWith(env.GEOTAB_PREFIX);
             })
         };
 
