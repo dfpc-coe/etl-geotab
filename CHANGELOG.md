@@ -10,7 +10,7 @@
 
 ## Version History
 
-### v2.4.0 - 2024-05-23
+### v2.5.0 - 2024-05-23
 
 - :rocket: Switch to group filtering for more efficient throughput
 
