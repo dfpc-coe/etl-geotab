@@ -23,6 +23,7 @@ export default class Task extends ETL {
             return Type.Object({
                 vin: Type.String(),
                 name: Type.String(),
+                driver: Type.String(),
                 licenseState: Type.String(),
                 licensePlate: Type.String(),
                 groups: Type.Array(Type.String())
@@ -109,13 +110,20 @@ export default class Task extends ETL {
                 if (!info) return null;
 
                 if (!d.licenseState) d.licenseState = 'US';
-                callsign = d.licenseState + '-' + (d.licensePlate || 'Unknown')
-
                 metadata.vin = d.vehicleIdentificationNumber;
                 metadata.licenseState = d.licenseState;
                 metadata.licensePlate = d.licensePlate || 'Unknown';
                 metadata.groups = info.groups;
                 metadata.name = d.name || 'No Name';
+                metadata.driver = info.driver || 'No Driver';
+
+                if (info.driver && info.driver !== 'UnknownDriverId') {
+                    callsign = info.driver
+                } else if (d.name) {
+                    callsign = d.name;
+                } else {
+                    callsign = d.licenseState + '-' + (d.licensePlate || 'Unknown')
+                }
 
                 const feat = {
                     id: `geotab-${info.device.id}`,

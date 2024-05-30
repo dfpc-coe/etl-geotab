@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.8.0 - 2024-05-30
+
+- :rocket: More complicated name fallback
+
 ### v2.7.0 - 2024-05-23
 
 - :rocket: Filter by name prefix
