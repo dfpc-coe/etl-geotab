@@ -59,50 +59,70 @@ export default class Task extends ETL {
 
         const credentials = (await auth.json()).result.credentials;
 
-        const info = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                method: 'Get',
-                params: {
+        let res: { info?: any, devices?: any, drivers?: any }  = {};
+
+        await Promise.all([
+            (async () => {
+                res.info = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        method: 'Get',
+                        params: {
+                            credentials,
+                            typeName: "DeviceStatusInfo",
+                        }
+                    })
+                })).json();
+            })(),
+            (async () => {
+                res.drivers = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        method: 'GetFeed',
+                        params: {
+                            credentials,
+                            typeName: 'Driver',
+                        }
+                    })
+                })).json();
+            })(),
+            (async () => {
+                const params: any = {
                     credentials,
-                    typeName: "DeviceStatusInfo",
+                    typeName: "Device",
+                    search: {
+                        excludeUntrackedAssets: true,
+                        fromDate: moment().subtract(1, 'hour').toISOString()
+                    }
                 }
-            })
-        })).json();
 
-        const params: any = {
-            credentials,
-            typeName: "Device",
-            search: {
-                excludeUntrackedAssets: true,
-                fromDate: moment().subtract(1, 'hour').toISOString()
-            }
-        }
+                if (env.GEOTAB_GROUPS && env.GEOTAB_GROUPS.length) {
+                    params.search.groups = env.GEOTAB_GROUPS.map((g) => {
+                        return { id: g.GroupId };
+                    });
+                }
 
-        if (env.GEOTAB_GROUPS && env.GEOTAB_GROUPS.length) {
-            params.search.groups = env.GEOTAB_GROUPS.map((g) => {
-                return { id: g.GroupId };
-            });
-        }
-
-        const devices = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                method: 'Get',
-                params: params
-            })
-        })).json();
+                res.devices = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        method: 'Get',
+                        params: params
+                    })
+                })).json();
+            })()
+        ]);
 
         const infoMap = new Map();
-        for (const i of info.result) {
+        for (const i of res.info.result) {
             infoMap.set(i.device.id, i);
         }
 
         const fc: FeatureCollection = {
             type: 'FeatureCollection',
-            features: devices.result.map((d: any) => {
+            features: res.devices.result.map((d: any) => {
                 let callsign = d.id;
                 const metadata: Record<string, string> = {};
 
@@ -117,7 +137,11 @@ export default class Task extends ETL {
                 metadata.name = d.name || 'No Name';
                 metadata.driver = info.driver || 'No Driver';
 
-                if (info.driver && info.driver !== 'UnknownDriverId') {
+                if (d.name === '0617-7551') {
+                    console.log(JSON.stringify(d), JSON.stringify(info));
+                }
+
+                if (typeof info.driver === 'string' && info.driver !== 'UnknownDriverId') {
                     callsign = info.driver
                 } else if (d.name) {
                     callsign = d.name;

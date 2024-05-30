@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.9.0 - 2024-05-30
+
+- :rocket: Parallel Request Support
+
 ### v2.8.0 - 2024-05-30
 
 - :rocket: More complicated name fallback
