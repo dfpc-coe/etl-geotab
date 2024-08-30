@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.10.0 - 2024-08-30
+
+- :rocket: TS Improvements
+
 ### v2.9.0 - 2024-05-30
 
 - :rocket: Parallel Request Support

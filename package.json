@@ -13,12 +13,12 @@
     "author": "Nick Ingalls <nick@ingalls.ca>",
     "license": "ISC",
     "devDependencies": {
-        "eslint": "^8.31.0",
+        "eslint": "^9.0.0",
         "typescript": "^5.4.5",
-        "typescript-eslint": "^7.9.0"
+        "typescript-eslint": "^8.0.0"
     },
     "dependencies": {
-        "@tak-ps/etl": "^4.3.3",
+        "@tak-ps/etl": "^5.0.0",
         "moment-timezone": "^0.5.43"
     }
 }

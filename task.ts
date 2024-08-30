@@ -1,4 +1,4 @@
-import ETL, { Event, SchemaType, handler as internal, local, env } from '@tak-ps/etl';
+import ETL, { Event, SchemaType, handler as internal, local, env, fetch } from '@tak-ps/etl';
 import { Type, TSchema, Static } from '@sinclair/typebox';
 import { FeatureCollection, Feature } from 'geojson';
 import moment from 'moment-timezone'
@@ -7,7 +7,10 @@ const SchemaInput = Type.Object({
     'GEOTAB_USERNAME': Type.String({ description: 'GeoTab Username' }),
     'GEOTAB_PASSWORD': Type.String({ description: 'GeoTab Password' }),
     'GEOTAB_DATABASE': Type.String({ description: 'GeoTab Database - Usually OK to leave this blank', default: '' }),
-    'GEOTAB_API': Type.String({ description: 'GeoTab API Endpoint', default: 'https://gov.geotabgov.us/' }),
+    'GEOTAB_API': Type.String({
+        description: 'GeoTab API Endpoint',
+        default: 'https://gov.geotabgov.us/'
+    }),
     'GEOTAB_GROUPS': Type.Array(Type.Object({
         GroupId: Type.String({ description: 'The GeoTAB GroupID to Filter by' }),
     })),
@@ -42,24 +45,38 @@ export default class Task extends ETL {
 
         const env: Static<typeof SchemaInput> = layer.environment as Static<typeof SchemaInput>;
 
-        const auth = await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
+        const url = new URL(env.GEOTAB_API + '/apiv1');
+        console.log(`ok - POST ${String(url)}`);
+
+        const auth = await fetch(url, {
             method: 'POST',
             headers: {
+                Accept: 'application/json',
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 method: 'Authenticate',
                 params: {
-                    database: env.GEOTAB_DATABASE,
+                    database: env.GEOTAB_DATABASE || '',
                     userName: env.GEOTAB_USERNAME,
                     password: env.GEOTAB_PASSWORD
                 }
             })
         });
 
-        const credentials = (await auth.json()).result.credentials;
+        const body = await auth.typed(Type.Object({
+            result: Type.Object({
+                credentials: Type.Object({
+                    database: Type.String(),
+                    sessionId: Type.String(),
+                    userName: Type.String()
+                })
+            })
+        }))
 
-        let res: { info?: any, devices?: any, drivers?: any }  = {};
+        const credentials = body.result.credentials;
+
+        const res: { info?: any, devices?: any, drivers?: any }  = {};
 
         await Promise.all([
             (async () => {
@@ -80,7 +97,7 @@ export default class Task extends ETL {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        method: 'GetFeed',
+                        method: 'Get',
                         params: {
                             credentials,
                             typeName: 'Driver',
@@ -115,6 +132,8 @@ export default class Task extends ETL {
             })()
         ]);
 
+        console.error(res.drivers);
+
         const infoMap = new Map();
         for (const i of res.info.result) {
             infoMap.set(i.device.id, i);
@@ -136,10 +155,6 @@ export default class Task extends ETL {
                 metadata.groups = info.groups;
                 metadata.name = d.name || 'No Name';
                 metadata.driver = info.driver || 'No Driver';
-
-                if (d.name === '0617-7551') {
-                    console.log(JSON.stringify(d), JSON.stringify(info));
-                }
 
                 if (typeof info.driver === 'string' && info.driver !== 'UnknownDriverId') {
                     callsign = info.driver
