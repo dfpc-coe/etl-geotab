@@ -3,6 +3,40 @@ import { Type, TSchema, Static } from '@sinclair/typebox';
 import { FeatureCollection, Feature } from 'geojson';
 import moment from 'moment-timezone'
 
+const Credentials = Type.Object({
+    database: Type.String(),
+    sessionId: Type.String(),
+    userName: Type.String()
+})
+
+const GEOTAB_DeviceInfo = Type.Object({
+    bearing: Type.Number(),
+    currentStateDuration: Type.String(),
+    exceptionEvents: Type.Array(Type.Unknown()),
+    isDeviceCommunicating: Type.Boolean(),
+    isDriving: Type.Boolean(),
+    latitude: Type.Number(),
+    longitude: Type.Number(),
+    speed: Type.Number(),
+    dateTime: Type.String(),
+    device: Type.Object({
+        id: Type.String()
+    }),
+    driver: Type.Unknown(),
+    isHistoricLastDriver: Type.Boolean(),
+    groups: Type.Array(Type.Object({
+        id: Type.String()
+    }))
+});
+
+export const Result = Type.Object({
+    info: Type.Optional(Type.Array(GEOTAB_DeviceInfo)),
+
+    // TODO Type these
+    devices: Type.Optional(Type.Array(Type.Any())),
+    drivers: Type.Optional(Type.Array(Type.Any()))
+});
+
 const SchemaInput = Type.Object({
     'GEOTAB_USERNAME': Type.String({ description: 'GeoTab Username' }),
     'GEOTAB_PASSWORD': Type.String({ description: 'GeoTab Password' }),
@@ -14,7 +48,7 @@ const SchemaInput = Type.Object({
     'GEOTAB_GROUPS': Type.Array(Type.Object({
         GroupId: Type.String({ description: 'The GeoTAB GroupID to Filter by' }),
     })),
-    'GEOTAB_PREFIX': Type.String({ default: '', description: 'Filter by prefix of name fielt' }),
+    'GEOTAB_PREFIX': Type.String({ default: '', description: 'Filter by prefix of name field' }),
     'DEBUG': Type.Boolean({ description: 'Print GeoJSON Features in logs', default: false })
 });
 
@@ -36,51 +70,29 @@ export default class Task extends ETL {
 
     async control() {
         const layer = await this.fetchLayer();
+        const env = await this.env(SchemaInput);
 
-        if (!layer.environment.GEOTAB_USERNAME) throw new Error('No GEOTAB_USERNAME Provided');
-        if (!layer.environment.GEOTAB_PASSWORD) throw new Error('No GEOTAB_PASSWORD Provided');
-        if (!layer.environment.GEOTAB_DATABASE) layer.environment.GEOTAB_DATABASE = '';
-        if (!layer.environment.GEOTAB_PREFIX) layer.environment.GEOTAB_PREFIX = '';
-        if (!layer.environment.GEOTAB_API) layer.environment.GEOTAB_API = 'https://gov.geotabgov.us';
+        let credentials: Static<typeof Credentials>;
+        if (Object.keys(layer.ephemeral).length) {
+            try {
+                credentials = layer.ephemeral as Static<typeof Credentials>;
+                await this.user(env, credentials);
+                console.log('ok - using cached credentials');
+            } catch (err) {
+                console.warn('Failed user check, reauthenticating', err);
+                credentials = await this.login(env)
+                this.setEphemeral(credentials);
+            }
+        } else  {
+            credentials = await this.login(env)
+            this.setEphemeral(credentials);
+        }
 
-        const env: Static<typeof SchemaInput> = layer.environment as Static<typeof SchemaInput>;
-
-        const url = new URL(env.GEOTAB_API + '/apiv1');
-        console.log(`ok - POST ${String(url)}`);
-
-        const auth = await fetch(url, {
-            method: 'POST',
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                method: 'Authenticate',
-                params: {
-                    database: env.GEOTAB_DATABASE || '',
-                    userName: env.GEOTAB_USERNAME,
-                    password: env.GEOTAB_PASSWORD
-                }
-            })
-        });
-
-        const body = await auth.typed(Type.Object({
-            result: Type.Object({
-                credentials: Type.Object({
-                    database: Type.String(),
-                    sessionId: Type.String(),
-                    userName: Type.String()
-                })
-            })
-        }))
-
-        const credentials = body.result.credentials;
-
-        const res: { info?: any, devices?: any, drivers?: any }  = {};
+        const res: Static<typeof Result> = {};
 
         await Promise.all([
             (async () => {
-                res.info = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
+                const req = await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -90,20 +102,35 @@ export default class Task extends ETL {
                             typeName: "DeviceStatusInfo",
                         }
                     })
-                })).json();
+                });
+
+                const body = await req.typed(Type.Object({
+                    result: Type.Array(GEOTAB_DeviceInfo)
+                }))
+
+                res.info = body.result;
             })(),
             (async () => {
-                res.drivers = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
+                const req = await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         method: 'Get',
                         params: {
                             credentials,
-                            typeName: 'Driver',
+                            search: {
+                                isDriver: true
+                            },
+                            typeName: 'User',
                         }
                     })
-                })).json();
+                });
+
+                const body = await req.typed(Type.Object({
+                    result: Type.Array(Type.Any())
+                }));
+
+                res.drivers = body.result;
             })(),
             (async () => {
                 const params: any = {
@@ -121,27 +148,31 @@ export default class Task extends ETL {
                     });
                 }
 
-                res.devices = await (await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
+                const req = await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         method: 'Get',
                         params: params
                     })
-                })).json();
+                });
+
+                const body  = await req.typed(Type.Object({
+                    result: Type.Array(Type.Any())
+                }));
+
+                res.devices = body.result;
             })()
         ]);
 
-        console.error(res.drivers);
-
         const infoMap = new Map();
-        for (const i of res.info.result) {
+        for (const i of res.info) {
             infoMap.set(i.device.id, i);
         }
 
         const fc: FeatureCollection = {
             type: 'FeatureCollection',
-            features: res.devices.result.map((d: any) => {
+            features: res.devices.map((d: any) => {
                 let callsign = d.id;
                 const metadata: Record<string, string> = {};
 
@@ -190,6 +221,67 @@ export default class Task extends ETL {
 
         await this.submit(fc);
     }
+
+    /**
+     * The Login endpoint is rightfully rate limited, I don't believe this endpoint has the same
+     * limits so we're using this to test cached credentials
+     */
+    async user(env: Static<typeof SchemaInput>, credentials: Static<typeof Credentials>) {
+        const user_res = await fetch(new URL(env.GEOTAB_API + '/apiv1'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                method: 'Get',
+                params: {
+                    credentials,
+                    search: { name: credentials.userName },
+                    typeName: "User",
+                }
+            })
+        });
+
+        if (!user_res.ok) {
+            throw new Error(await user_res.text());
+        }
+
+        await user_res.typed(Type.Object({
+            result: Type.Array(Type.Object({
+                name: Type.String()
+            }))
+        }));
+    }
+
+    async login(env: Static<typeof SchemaInput>): Promise<Static<typeof Credentials>> {
+        const url = new URL(env.GEOTAB_API + '/apiv1');
+        console.log(`ok - POST ${String(url)}`);
+
+        const auth = await fetch(url, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                method: 'Authenticate',
+                params: {
+                    database: env.GEOTAB_DATABASE || '',
+                    userName: env.GEOTAB_USERNAME,
+                    password: env.GEOTAB_PASSWORD
+                }
+            })
+        });
+
+        const body = await auth.typed(Type.Object({
+            result: Type.Object({
+                credentials: Credentials
+            })
+        }))
+
+        const credentials = body.result.credentials;
+
+        return credentials;
+    }
+
 }
 
 env(import.meta.url)
