@@ -10,6 +10,39 @@
 
 ## Version History
 
+### v2.10.0 - 2024-08-30
+
+- :rocket: TS Improvements
+
+### v2.9.0 - 2024-05-30
+
+- :rocket: Parallel Request Support
+
+### v2.8.0 - 2024-05-30
+
+- :rocket: More complicated name fallback
+
+### v2.7.0 - 2024-05-23
+
+- :rocket: Filter by name prefix
+
+### v2.6.0 - 2024-05-23
+
+- :rocket: Use API Filtering
+
+### v2.5.0 - 2024-05-23
+
+- :rocket: Switch to group filtering for more efficient throughput
+
+### v2.4.0 - 2024-05-16
+
+- :rocket: Allow callsign overrides
+- :rocket: Update to flat ESLint
+
+### v2.3.0
+
+- :rocket: Allow filtering vehicles by VIN
+
 ### v2.2.0
 
 - :arrow_up: Update to include Augment
