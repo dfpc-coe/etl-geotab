@@ -9,6 +9,7 @@ const Credentials = Type.Object({
     userName: Type.String()
 })
 
+// This schema is believed to be complete
 const GEOTAB_DeviceInfo = Type.Object({
     bearing: Type.Number(),
     currentStateDuration: Type.String(),
@@ -22,11 +23,28 @@ const GEOTAB_DeviceInfo = Type.Object({
     device: Type.Object({
         id: Type.String()
     }),
-    driver: Type.Unknown(),
+    driver: Type.Optional(Type.Union([Type.String(), Type.Object({
+        id: Type.String(),
+        isDriver: Type.Boolean(),
+        driverGroups: Type.Array(Type.Object({
+            id: Type.String()
+        }))
+    })])),
     isHistoricLastDriver: Type.Boolean(),
     groups: Type.Array(Type.Object({
         id: Type.String()
     }))
+});
+
+// This schema is not complete and only grabs relevantish fields
+const GEOTAB_Driver = Type.Object({
+    id: Type.String(),
+    name: Type.String(),
+    comment: Type.String(),
+    phoneNumber: Type.String(),
+    firstName: Type.String(),
+    lastName: Type.String(),
+    designation: Type.String(),
 });
 
 export const Result = Type.Object({
@@ -34,7 +52,7 @@ export const Result = Type.Object({
 
     // TODO Type these
     devices: Type.Optional(Type.Array(Type.Any())),
-    drivers: Type.Optional(Type.Array(Type.Any()))
+    drivers: Type.Optional(Type.Array(GEOTAB_Driver))
 });
 
 const SchemaInput = Type.Object({
@@ -52,19 +70,26 @@ const SchemaInput = Type.Object({
     'DEBUG': Type.Boolean({ description: 'Print GeoJSON Features in logs', default: false })
 });
 
+const SchemaOutput = Type.Object({
+    vin: Type.String(),
+    name: Type.String(),
+    licenseState: Type.String(),
+    licensePlate: Type.String(),
+    groups: Type.Array(Type.String()),
+    driverUsername: Type.Optional(Type.String()),
+    driverFirstName: Type.Optional(Type.String()),
+    driverLastName: Type.Optional(Type.String()),
+    driverPhone: Type.Optional(Type.String()),
+    driverDesignation: Type.Optional(Type.String()),
+    driverComment: Type.Optional(Type.String()),
+})
+
 export default class Task extends ETL {
     async schema(type: SchemaType = SchemaType.Input): Promise<TSchema> {
         if (type === SchemaType.Input) {
             return SchemaInput
         } else {
-            return Type.Object({
-                vin: Type.String(),
-                name: Type.String(),
-                driver: Type.String(),
-                licenseState: Type.String(),
-                licensePlate: Type.String(),
-                groups: Type.Array(Type.String())
-            });
+            return SchemaOutput
         }
     }
 
@@ -127,7 +152,7 @@ export default class Task extends ETL {
                 });
 
                 const body = await req.typed(Type.Object({
-                    result: Type.Array(Type.Any())
+                    result: Type.Array(GEOTAB_Driver)
                 }));
 
                 res.drivers = body.result;
@@ -170,26 +195,41 @@ export default class Task extends ETL {
             infoMap.set(i.device.id, i);
         }
 
+        const driverMap = new Map();
+        for (const d of res.drivers) {
+            driverMap.set(d.id, d);
+        }
+
         const fc: FeatureCollection = {
             type: 'FeatureCollection',
             features: res.devices.map((d: any) => {
                 let callsign = d.id;
-                const metadata: Record<string, string> = {};
-
                 const info = infoMap.get(d.id);
                 if (!info) return null;
 
-                if (!d.licenseState) d.licenseState = 'US';
-                metadata.vin = d.vehicleIdentificationNumber;
-                metadata.licenseState = d.licenseState;
-                metadata.licensePlate = d.licensePlate || 'Unknown';
-                metadata.groups = info.groups;
-                metadata.name = d.name || 'No Name';
-                metadata.driver = info.driver || 'No Driver';
+                const metadata: Static<typeof SchemaOutput> = {
+                    vin: d.vehicleIdentificationNumber,
+                    licenseState: d.licenseState || 'US',
+                    licensePlate: d.licensePlate || 'Unknown',
+                    groups: info.groups,
+                    name: d.name || 'No Name',
+                };
 
-                if (typeof info.driver === 'string' && info.driver !== 'UnknownDriverId') {
-                    callsign = info.driver
-                } else if (d.name) {
+
+                if (typeof info.driver !== 'string' && info.driver) {
+                    const driver = driverMap.get(info.driver.id);
+
+                    if (driver) {
+                        metadata.driverUsername = driver.name
+                        metadata.driverFirstName = driver.firstName
+                        metadata.driverLastName = driver.lastName;
+                        metadata.driverPhone = driver.phoneNumber
+                        metadata.driverDesignation = driver.designation
+                        metadata.driverComment = driver.comment
+                    }
+                }
+
+                if (d.name) {
                     callsign = d.name;
                 } else {
                     callsign = d.licenseState + '-' + (d.licensePlate || 'Unknown')

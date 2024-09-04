@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.12.0 - 2024-09-04
+
+- :tada: Expose driver fields where possible
+
 ### v2.11.0 - 2024-09-04
 
 - :rocket: Use new CloudTAK Ephemeral store for cached credentials
