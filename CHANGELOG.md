@@ -10,6 +10,11 @@
 
 ## Version History
 
+### v2.11.0 - 2024-09-04
+
+- :rocket: Use new CloudTAK Ephemeral store for cached credentials
+- :rocket: Use strong types for some calls
+
 ### v2.10.0 - 2024-08-30
 
 - :rocket: TS Improvements
