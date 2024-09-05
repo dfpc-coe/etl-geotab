@@ -1,7 +1,6 @@
 import ETL, { Event, SchemaType, handler as internal, local, env, fetch } from '@tak-ps/etl';
 import { Type, TSchema, Static } from '@sinclair/typebox';
 import { FeatureCollection, Feature } from 'geojson';
-import moment from 'moment-timezone'
 
 const Credentials = Type.Object({
     database: Type.String(),
@@ -163,7 +162,6 @@ export default class Task extends ETL {
                     typeName: "Device",
                     search: {
                         excludeUntrackedAssets: true,
-                        fromDate: moment().subtract(1, 'hour').toISOString()
                     }
                 }
 
@@ -200,6 +198,8 @@ export default class Task extends ETL {
             driverMap.set(d.id, d);
         }
 
+        const hourAgo = new Date(new Date().getTime() - 3600000)
+
         const fc: FeatureCollection = {
             type: 'FeatureCollection',
             features: res.devices.map((d: any) => {
@@ -233,6 +233,10 @@ export default class Task extends ETL {
                     callsign = d.name;
                 } else {
                     callsign = d.licenseState + '-' + (d.licensePlate || 'Unknown')
+                }
+
+                if (new Date(info.dateTime) <= hourAgo) {
+                    return null
                 }
 
                 const feat = {
