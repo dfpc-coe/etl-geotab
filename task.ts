@@ -1,6 +1,6 @@
 import ETL, { Event, SchemaType, handler as internal, local, env, fetch } from '@tak-ps/etl';
+import { InputFeatureCollection, InputFeature } from '@tak-ps/etl'
 import { Type, TSchema, Static } from '@sinclair/typebox';
-import { FeatureCollection, Feature } from 'geojson';
 
 const Credentials = Type.Object({
     database: Type.String(),
@@ -200,7 +200,7 @@ export default class Task extends ETL {
 
         const hourAgo = new Date(new Date().getTime() - 3600000)
 
-        const fc: FeatureCollection = {
+        const fc: Static<typeof InputFeatureCollection> = {
             type: 'FeatureCollection',
             features: res.devices.map((d: any) => {
                 let callsign = d.id;
@@ -255,10 +255,11 @@ export default class Task extends ETL {
                     }
                 }
 
-                return feat as Feature;
-            }).filter((f: Feature | null) => {
+                return feat as Static<typeof InputFeature>;
+            }).filter((f: Static<typeof InputFeature> | null) => {
                 return f !== null;
-            }).filter((f: Feature) => {
+            }).filter((f: Static<typeof InputFeature>) => {
+                // @ts-expect-error Metadata currently isn't typed
                 return f.properties.metadata.name.startsWith(env.GEOTAB_PREFIX);
             })
         };

@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.14.0 - 2024-09-05
+
+- :rocket: Update to use InputFeature types
+
 ### v2.13.0 - 2024-09-05
 
 - :rocket: Add Info check for data currency
