@@ -1,4 +1,4 @@
-import ETL, { Event, SchemaType, handler as internal, local, env, fetch } from '@tak-ps/etl';
+import ETL, { Event, SchemaType, handler as internal, local, fetch, DataFlowType, InvocationType } from '@tak-ps/etl';
 import { InputFeatureCollection, InputFeature } from '@tak-ps/etl'
 import { Type, TSchema, Static } from '@sinclair/typebox';
 
@@ -84,11 +84,22 @@ const SchemaOutput = Type.Object({
 })
 
 export default class Task extends ETL {
-    async schema(type: SchemaType = SchemaType.Input): Promise<TSchema> {
-        if (type === SchemaType.Input) {
-            return SchemaInput
+    static name = 'etl-geotab';
+    static flow = [ DataFlowType.Incoming ];
+    static invocation = [ InvocationType.Schedule ];
+
+    async schema(
+        type: SchemaType = SchemaType.Input,
+        flow: DataFlowType = DataFlowType.Incoming
+    ): Promise<TSchema> {
+        if (flow === DataFlowType.Incoming) {
+            if (type === SchemaType.Input) {
+                return SchemaInput
+            } else {
+                return SchemaOutput
+            }
         } else {
-            return SchemaOutput
+            return Type.Object({});
         }
     }
 
@@ -329,9 +340,8 @@ export default class Task extends ETL {
 
 }
 
-env(import.meta.url)
-await local(new Task(), import.meta.url);
+await local(new Task(import.meta.url), import.meta.url);
 export async function handler(event: Event = {}) {
-    return await internal(new Task(), event);
+    return await internal(new Task(import.meta.url), event);
 }
 

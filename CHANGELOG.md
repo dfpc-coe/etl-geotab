@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v2.15.0 - 2025-01-29
+
+- :tada: Add Capabilities API
+
 ### v2.14.0 - 2024-09-05
 
 - :rocket: Update to use InputFeature types
