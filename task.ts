@@ -108,9 +108,9 @@ export default class Task extends ETL {
         const env = await this.env(SchemaInput);
 
         let credentials: Static<typeof Credentials>;
-        if (Object.keys(layer.ephemeral).length) {
+        if (Object.keys(layer.incoming.ephemeral).length) {
             try {
-                credentials = layer.ephemeral as Static<typeof Credentials>;
+                credentials = layer.incoming.ephemeral as Static<typeof Credentials>;
                 await this.user(env, credentials);
                 console.log('ok - using cached credentials');
             } catch (err) {

@@ -18,6 +18,6 @@
         "typescript-eslint": "^8.0.0"
     },
     "dependencies": {
-        "@tak-ps/etl": "^7.1.1"
+        "@tak-ps/etl": "^8.0.2"
     }
 }
