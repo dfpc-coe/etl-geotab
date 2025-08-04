@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v3.1.0
+
+- :arrow_up: Update Core Deps
+
 ### v3.0.0
 
 - :tada: Update to `CloudTAK@v6`
