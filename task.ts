@@ -46,11 +46,18 @@ const GEOTAB_Driver = Type.Object({
     designation: Type.String(),
 });
 
+const GEOTAB_Device = Type.Object({
+    id: Type.String(),
+    vehicleIdentificationNumber: Type.String(),
+    licenseState: Type.Optional(Type.String()),
+    licensePlate: Type.Optional(Type.String()),
+    name: Type.Optional(Type.String()),
+});
+
 export const Result = Type.Object({
     info: Type.Optional(Type.Array(GEOTAB_DeviceInfo)),
 
-    // TODO Type these
-    devices: Type.Optional(Type.Array(Type.Any())),
+    devices: Type.Optional(Type.Array(GEOTAB_Device)),
     drivers: Type.Optional(Type.Array(GEOTAB_Driver))
 });
 
@@ -83,6 +90,17 @@ const SchemaOutput = Type.Object({
     driverComment: Type.Optional(Type.String()),
 })
 
+type DeviceRequestParams = {
+    credentials: Static<typeof Credentials>;
+    typeName: 'Device';
+    search: {
+        excludeUntrackedAssets: boolean;
+        groups?: Array<{
+            id: string;
+        }>;
+    };
+};
+
 export default class Task extends ETL {
     static name = 'etl-geotab';
     static flow = [ DataFlowType.Incoming ];
@@ -106,11 +124,12 @@ export default class Task extends ETL {
     async control() {
         const layer = await this.fetchLayer();
         const env = await this.env(SchemaInput);
+        const incomingEphemeral = layer.incoming?.ephemeral;
 
         let credentials: Static<typeof Credentials>;
-        if (Object.keys(layer.incoming.ephemeral).length) {
+        if (incomingEphemeral && Object.keys(incomingEphemeral).length) {
             try {
-                credentials = layer.incoming.ephemeral as Static<typeof Credentials>;
+                credentials = incomingEphemeral as Static<typeof Credentials>;
                 await this.user(env, credentials);
                 console.log('ok - using cached credentials');
             } catch (err) {
@@ -168,9 +187,9 @@ export default class Task extends ETL {
                 res.drivers = body.result;
             })(),
             (async () => {
-                const params: any = {
+                const params: DeviceRequestParams = {
                     credentials,
-                    typeName: "Device",
+                    typeName: 'Device',
                     search: {
                         excludeUntrackedAssets: true,
                     }
@@ -192,7 +211,7 @@ export default class Task extends ETL {
                 });
 
                 const body  = await req.typed(Type.Object({
-                    result: Type.Array(Type.Any())
+                    result: Type.Array(GEOTAB_Device)
                 }));
 
                 res.devices = body.result;
@@ -200,12 +219,12 @@ export default class Task extends ETL {
         ]);
 
         const infoMap = new Map();
-        for (const i of res.info) {
+        for (const i of res.info ?? []) {
             infoMap.set(i.device.id, i);
         }
 
         const driverMap = new Map();
-        for (const d of res.drivers) {
+        for (const d of res.drivers ?? []) {
             driverMap.set(d.id, d);
         }
 
@@ -213,8 +232,7 @@ export default class Task extends ETL {
 
         const fc: Static<typeof Feature.InputFeatureCollection> = {
             type: 'FeatureCollection',
-            features: res.devices.map((d: any) => {
-                let callsign = d.id;
+            features: (res.devices ?? []).map((d) => {
                 const info = infoMap.get(d.id);
                 if (!info) return null;
 
@@ -240,11 +258,9 @@ export default class Task extends ETL {
                     }
                 }
 
-                if (d.name) {
-                    callsign = d.name;
-                } else {
-                    callsign = d.licenseState + '-' + (d.licensePlate || 'Unknown')
-                }
+                const callsign = d.name
+                    ? d.name
+                    : `${d.licenseState ?? 'US'}-${d.licensePlate || 'Unknown'}`;
 
                 if (new Date(info.dateTime) <= hourAgo) {
                     return null
