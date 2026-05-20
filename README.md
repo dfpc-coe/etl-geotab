@@ -2,6 +2,11 @@
 
 <p align='center'>Bring GeoTAB Location data into the TAK System</p>
 
+## Setup
+To determine the GeoTab group to be passed to the ETL, use developer tools and inspect the request payload when selecting the group using the GeoTab UI. A "Group ID" tag should be seen and this will be added to the CloudTAK Environment section when deploying the ETL.  
+<img width="631" height="119" alt="image" src="https://github.com/user-attachments/assets/0538f6e6-d145-4a4b-9179-68128542757d" />
+
+
 ## Development
 
 DFPC provided Lambda ETLs are currently all written in [NodeJS](https://nodejs.org/en) through the use of a AWS Lambda optimized
