@@ -10,6 +10,10 @@
 
 ## Version History
 
+### v3.14.0
+
+- :arrow_up: Update Core Dependencies
+
 ### Pending Release
 
 ### v3.13.0 - 2026-11-17
