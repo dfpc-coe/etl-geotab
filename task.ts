@@ -1,6 +1,7 @@
 import ETL, { Event, SchemaType, handler as internal, local, fetch, DataFlowType, InvocationType } from '@tak-ps/etl';
 import { Feature } from '@tak-ps/node-cot'
 import { Type, TSchema, Static } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
 
 const Credentials = Type.Object({
     database: Type.String(),
@@ -90,6 +91,8 @@ const SchemaOutput = Type.Object({
     driverComment: Type.Optional(Type.String()),
 })
 
+type Metadata = Static<typeof SchemaOutput>;
+
 type DeviceRequestParams = {
     credentials: Static<typeof Credentials>;
     typeName: 'Device';
@@ -110,15 +113,9 @@ export default class Task extends ETL {
         type: SchemaType = SchemaType.Input,
         flow: DataFlowType = DataFlowType.Incoming
     ): Promise<TSchema> {
-        if (flow === DataFlowType.Incoming) {
-            if (type === SchemaType.Input) {
-                return SchemaInput
-            } else {
-                return SchemaOutput
-            }
-        } else {
-            return Type.Object({});
-        }
+        if (flow !== DataFlowType.Incoming) return Type.Object({});
+
+        return type === SchemaType.Input ? SchemaInput : SchemaOutput;
     }
 
     async control() {
@@ -127,19 +124,19 @@ export default class Task extends ETL {
         const incomingEphemeral = layer.incoming?.ephemeral;
 
         let credentials: Static<typeof Credentials>;
-        if (incomingEphemeral && Object.keys(incomingEphemeral).length) {
+        if (Value.Check(Credentials, incomingEphemeral)) {
             try {
-                credentials = incomingEphemeral as Static<typeof Credentials>;
-                await this.user(env, credentials);
+                await this.user(env, incomingEphemeral);
+                credentials = incomingEphemeral;
                 console.log('ok - using cached credentials');
             } catch (err) {
                 console.warn('Failed user check, reauthenticating', err);
                 credentials = await this.login(env)
-                this.setEphemeral(credentials);
+                await this.setEphemeral(credentials);
             }
         } else  {
             credentials = await this.login(env)
-            this.setEphemeral(credentials);
+            await this.setEphemeral(credentials);
         }
 
         const res: Static<typeof Result> = {};
@@ -195,7 +192,7 @@ export default class Task extends ETL {
                     }
                 }
 
-                if (env.GEOTAB_GROUPS && env.GEOTAB_GROUPS.length) {
+                if (Array.isArray(env.GEOTAB_GROUPS) && env.GEOTAB_GROUPS.length > 0) {
                     params.search.groups = env.GEOTAB_GROUPS.map((g) => {
                         return { id: g.GroupId };
                     });
@@ -218,78 +215,72 @@ export default class Task extends ETL {
             })()
         ]);
 
-        const infoMap = new Map();
+        const infoMap = new Map<string, Static<typeof GEOTAB_DeviceInfo>>();
         for (const i of res.info ?? []) {
             infoMap.set(i.device.id, i);
         }
 
-        const driverMap = new Map();
+        const driverMap = new Map<string, Static<typeof GEOTAB_Driver>>();
         for (const d of res.drivers ?? []) {
             driverMap.set(d.id, d);
         }
 
-        const hourAgo = new Date(new Date().getTime() - 3600000)
+        const hourAgo = new Date(Date.now() - 3600000)
 
         const fc: Static<typeof Feature.InputFeatureCollection> = {
             type: 'FeatureCollection',
-            features: (res.devices ?? []).map((d) => {
-                const info = infoMap.get(d.id);
-                if (!info) return null;
-
-                const metadata: Static<typeof SchemaOutput> = {
-                    vin: d.vehicleIdentificationNumber,
-                    licenseState: d.licenseState || 'US',
-                    licensePlate: d.licensePlate || 'Unknown',
-                    groups: info.groups,
-                    name: d.name || 'No Name',
-                };
-
-
-                if (typeof info.driver !== 'string' && info.driver) {
-                    const driver = driverMap.get(info.driver.id);
-
-                    if (driver) {
-                        metadata.driverUsername = driver.name
-                        metadata.driverFirstName = driver.firstName
-                        metadata.driverLastName = driver.lastName;
-                        metadata.driverPhone = driver.phoneNumber
-                        metadata.driverDesignation = driver.designation
-                        metadata.driverComment = driver.comment
-                    }
-                }
-
-                const callsign = d.name
-                    ? d.name
-                    : `${d.licenseState ?? 'US'}-${d.licensePlate || 'Unknown'}`;
-
-                if (new Date(info.dateTime) <= hourAgo) {
-                    return null
-                }
-
-                const feat = {
-                    id: `geotab-${info.device.id}`,
-                    type: 'Feature',
-                    properties: {
-                        callsign,
-                        course: info.bearing,
-                        start: info.dateTime,
-                        speed: info.speed * 0.277778, // Convert km/h => m/s
-                        metadata
-                    },
-                    geometry: {
-                        type: 'Point',
-                        coordinates: [info.longitude, info.latitude]
-                    }
-                }
-
-                return feat as Static<typeof Feature.InputFeature>;
-            }).filter((f: Static<typeof Feature.InputFeature> | null) => {
-                return f !== null;
-            }).filter((f: Static<typeof Feature.InputFeature>) => {
-                // @ts-expect-error Metadata currently isn't typed
-                return f.properties.metadata.name.startsWith(env.GEOTAB_PREFIX);
-            })
+            features: []
         };
+
+        for (const d of res.devices ?? []) {
+            const info = infoMap.get(d.id);
+            if (!info) continue;
+
+            const metadata: Metadata = {
+                vin: d.vehicleIdentificationNumber,
+                licenseState: d.licenseState || 'US',
+                licensePlate: d.licensePlate || 'Unknown',
+                groups: info.groups.map((g) => g.id),
+                name: d.name || 'No Name',
+            };
+
+            if (typeof info.driver !== 'string' && info.driver) {
+                const driver = driverMap.get(info.driver.id);
+
+                if (driver) {
+                    metadata.driverUsername = driver.name
+                    metadata.driverFirstName = driver.firstName
+                    metadata.driverLastName = driver.lastName;
+                    metadata.driverPhone = driver.phoneNumber
+                    metadata.driverDesignation = driver.designation
+                    metadata.driverComment = driver.comment
+                }
+            }
+
+            const callsign = d.name
+                ? d.name
+                : `${d.licenseState ?? 'US'}-${d.licensePlate || 'Unknown'}`;
+
+            if (new Date(info.dateTime) <= hourAgo) continue;
+            if (!metadata.name.startsWith(env.GEOTAB_PREFIX)) continue;
+
+            fc.features.push({
+                id: `geotab-${info.device.id}`,
+                type: 'Feature',
+                properties: {
+                    callsign,
+                    course: info.bearing,
+                    start: info.dateTime,
+                    // Convert km/h => m/s
+                    speed: info.speed * 0.277778,
+                    metadata
+                },
+                geometry: {
+                    type: 'Point',
+                    coordinates: [info.longitude, info.latitude]
+                }
+            });
+        }
 
         await this.submit(fc);
     }
@@ -357,7 +348,7 @@ export default class Task extends ETL {
 }
 
 await local(await Task.init(import.meta.url), import.meta.url);
-export async function handler(event: Event = {}) {
-    return await internal(await Task.init(import.meta.url), event);
+export async function handler(event: Event = {}): ReturnType<typeof internal> {
+    return internal(await Task.init(import.meta.url), event);
 }
 
